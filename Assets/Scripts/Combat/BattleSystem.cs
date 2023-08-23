@@ -15,6 +15,8 @@ public class BattleSystem : MonoBehaviour
     private UnitManager enemyUnit;
 
     public GameObject stateWindow;
+    public GameObject continueButton;
+    public GameObject restartButton;
 
     public TextMeshProUGUI enemyName;
     public TextMeshProUGUI playerName;
@@ -23,12 +25,20 @@ public class BattleSystem : MonoBehaviour
     public BattleHub playerHub;
     public BattleHub enemyHub;
 
+    private void Awake()
+    {
+        battleSystemSO = SceneSOSave.Instance.battleSystem;
+    }
     void Start()
     {
         state = BattleStates.Start;
         StartCoroutine(SetUpBattle());
     }
-
+    private void OnDestroy()
+    {
+        if(state == BattleStates.Won)
+            SceneSOSave.Instance.LoadTransform();
+    }
     private IEnumerator SetUpBattle()
     {
         if(state == BattleStates.Start)
@@ -39,11 +49,13 @@ public class BattleSystem : MonoBehaviour
         }
         GameObject playerGO = Instantiate(battleSystemSO.playerPrefab, playerBattleStation);
         playerUnit = playerGO.GetComponent<UnitManager>();
-        playerName.text = playerUnit.name;
+        playerName.text = playerUnit.nameUnit;
 
         GameObject enemyGO = Instantiate(battleSystemSO.enemyPrefab, enemyBattleStation);
         enemyUnit = enemyGO.GetComponent<UnitManager>();
-        enemyName.text = enemyUnit.name;
+        enemyName.text = enemyUnit.nameUnit;
+
+        //GameObject weaponGO = Instantiate(ShopManager.Instance.weaponData.sprite, playerBattleStation);
 
         playerHub.SetHUD(playerUnit);
         enemyHub.SetHUD(enemyUnit);
@@ -54,25 +66,49 @@ public class BattleSystem : MonoBehaviour
         StartCoroutine(PlayerTurn());
     }
 
-    private IEnumerator EnemyTurn(float rng)
+    private IEnumerator EnemyTurn(float rng) //rng is the posibility to enemy attack with fisical o magical attack
     {
         stateWindow.SetActive(true);
         stateMessage.text = "Enemy Turn";
         yield return new WaitForSeconds(2f);
-        if(Random.value >= rng)
+        float life = enemyUnit.health / 2;
+        if(enemyUnit.currentHealth <= life) 
         {
-            StartCoroutine(EnemyAttack(enemyUnit.damage));
-        }else
+            if(Random.value >= 0.5) //if the life is less than the current health, the enemy has a 50% of chance to defend the next attack
+            {
+                enemyUnit.isDef = true;
+                StartCoroutine(EnemyDefend(enemyUnit.def));
+            }
+            else
+            {
+                if (Random.value >= rng)
+                {
+                    StartCoroutine(EnemyAttack(enemyUnit.damage));
+                }
+                else
+                {
+                    StartCoroutine(EnemyAttack(enemyUnit.magic * 2));
+                }
+            }
+        }
+        else
         {
-            StartCoroutine(EnemyAttack(enemyUnit.magic * 2));
-        }     
+            if (Random.value >= rng)
+            {
+                StartCoroutine(EnemyAttack(enemyUnit.damage));
+            }
+            else
+            {
+                StartCoroutine(EnemyAttack(enemyUnit.magic * 2));
+            }
+        }
     }
     private IEnumerator EnemyAttack(int dmg)
     {
         bool playerIsDead;
         if (playerUnit.isDef) //If the player is defended, we calculate the difference between the enemy damage and player defense
         {
-            if (dmg < playerUnit.def) //If def is greater than the enemy damage, the damage take is 1
+            if (dmg <= playerUnit.def) //If def is greater than the enemy damage, the damage take is 1
             {
                 dmg = 1;
                 playerIsDead = playerUnit.TakeDamage(dmg);
@@ -85,7 +121,7 @@ public class BattleSystem : MonoBehaviour
             {
                 dmg -= playerUnit.def;
                 playerIsDead = playerUnit.TakeDamage(dmg);
-                stateMessage.text = "Enemy Deals you Damage: " + dmg;
+                stateMessage.text = "Enemy Deals you Magic Damage: " + dmg;
                 yield return new WaitForSeconds(2f);
                 playerUnit.isDef = false;
                 playerHub.SetHP(playerUnit.currentHealth);
@@ -110,23 +146,53 @@ public class BattleSystem : MonoBehaviour
         }
         yield return new WaitForSeconds(2f);
     }
+    private IEnumerator EnemyDefend(int def)
+    {
+        stateWindow.SetActive(true);
+        stateMessage.text = "The Enemy is Defended";
+        yield return new WaitForSeconds(1f);
+
+        state = BattleStates.PlayerTurn;
+        StartCoroutine(PlayerTurn());
+    }
     private IEnumerator PlayerAttack(int dmg, string type)
     {
         bool enemyIsDead;
-        if (type == "damage")
+        if (enemyUnit.isDef)
+        {
+            if(dmg <= enemyUnit.def)
+            {
+                dmg = 1;
+                enemyIsDead = enemyUnit.TakeDamage(dmg);
+                stateWindow.SetActive(true);
+                if (type == "damage")
+                    stateMessage.text = "Successful Attack: " + dmg;
+                else
+                    stateMessage.text = "Successful Magic Attack: " + dmg;
+                yield return new WaitForSeconds(2f);
+                enemyUnit.isDef = false;
+                enemyHub.SetHP(enemyUnit.currentHealth);
+            }else
+            {
+                dmg -= enemyUnit.def;
+                enemyIsDead = enemyUnit.TakeDamage(dmg);
+                stateWindow.SetActive(true);
+                if (type == "damage")
+                    stateMessage.text = "Successful Attack: " + dmg;
+                else
+                    stateMessage.text = "Successful Magic Attack: " + dmg;
+                yield return new WaitForSeconds(2f);
+                enemyUnit.isDef = false;
+                enemyHub.SetHP(enemyUnit.currentHealth);
+            }
+        }else
         {
             enemyIsDead = enemyUnit.TakeDamage(dmg);
-            stateWindow.SetActive(true);       
-            stateMessage.text = "Successful Attack: " + dmg;
-            yield return new WaitForSeconds(2f);
-            stateWindow.SetActive(false);    
-            enemyHub.SetHP(enemyUnit.currentHealth);
-        } else if (type == "magic")
-        {
-            dmg *= 2;
-            enemyIsDead = enemyUnit.TakeDamage(dmg);
-            stateWindow.SetActive(true);        
-            stateMessage.text = "Successful Magic Attack: " + dmg;
+            stateWindow.SetActive(true);
+            if (type == "damage")
+                stateMessage.text = "Successful Attack: " + dmg;
+            else
+                stateMessage.text = "Successful Magic Attack: " + dmg;
             yield return new WaitForSeconds(2f);
             stateWindow.SetActive(false);
             enemyHub.SetHP(enemyUnit.currentHealth);
@@ -170,10 +236,12 @@ public class BattleSystem : MonoBehaviour
         {
             stateWindow.SetActive(true);
             stateMessage.text = "YOU WON!";
+            continueButton.SetActive(true);
         } else if (state == BattleStates.Lose)
         {
             stateWindow.SetActive(true);
             stateMessage.text = "YOU LOSE!!";
+            restartButton.SetActive(true);
         }
     }
 
@@ -196,7 +264,7 @@ public class BattleSystem : MonoBehaviour
     {
         if (state != BattleStates.PlayerTurn)
             return;
-        StartCoroutine(PlayerAttack(playerUnit.magic, "magic"));
+        StartCoroutine(PlayerAttack(playerUnit.magic*2, "magic"));
     }
     public void OnDefenseButton()
     {

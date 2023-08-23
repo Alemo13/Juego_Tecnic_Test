@@ -7,6 +7,7 @@ public class UnitManager : MonoBehaviour
 {
     public UnitData unitData;
 
+    public string nameUnit;
     public float health;
     public float currentHealth;
     public int damage;
@@ -16,6 +17,7 @@ public class UnitManager : MonoBehaviour
 
     private void Awake()
     {
+        nameUnit = unitData.name;
         health = unitData.health;
         currentHealth = unitData.currentHealth;
         damage = unitData.damage;
@@ -32,4 +34,5 @@ public class UnitManager : MonoBehaviour
         else
             return false;
     }
+
 }

@@ -20,6 +20,9 @@ public class BattleHub : MonoBehaviour
 
     public void SetHP(float hp)
     {
-        unitHealth.text = "Health: " + hp;
+        if(hp <= 0)
+            unitHealth.text = "Health: 0";
+        else
+            unitHealth.text = "Health: " + hp;
     }
 }
